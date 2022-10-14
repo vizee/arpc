@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rokumoe/arpc"
+	"github.com/vizee/arpc"
 )
 
 type jsonRequest struct {

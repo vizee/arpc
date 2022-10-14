@@ -7,9 +7,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/rokumoe/arpc"
-	"github.com/rokumoe/arpc/examples/jsonrpc/proto"
-	"github.com/rokumoe/arpc/jsonrpc"
+	"github.com/vizee/arpc"
+	"github.com/vizee/arpc/codec/jsonrpc"
+	"github.com/vizee/arpc/examples/jsonrpc/proto"
 )
 
 func main() {

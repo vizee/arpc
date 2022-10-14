@@ -1,3 +1,3 @@
-module github.com/rokumoe/arpc
+module github.com/vizee/arpc
 
 go 1.17

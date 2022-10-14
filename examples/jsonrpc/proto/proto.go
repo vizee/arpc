@@ -3,7 +3,7 @@ package proto
 import (
 	"context"
 
-	"github.com/rokumoe/arpc"
+	"github.com/vizee/arpc"
 )
 
 type Greeter interface {
