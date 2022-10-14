@@ -13,10 +13,6 @@ import (
 type GreeterService struct {
 }
 
-func (*GreeterService) ServiceName() string {
-	return "Greeter"
-}
-
 func (*GreeterService) SayHello(ctx context.Context, in *proto.HelloRequest) (*proto.HelloReply, error) {
 	log.Printf("SayHello: %s", in.Name)
 
@@ -27,7 +23,7 @@ func (*GreeterService) SayHello(ctx context.Context, in *proto.HelloRequest) (*p
 
 func main() {
 	svc := &GreeterService{}
-	srv, err := (&arpc.ServerBuilder{}).Register(svc).WithCodec(jsonrpc.GetCodec()).Build()
+	srv, err := arpc.NewServerBuilder[*jsonrpc.ServerConn[net.Conn], jsonrpc.Codec]().RegisterNamed("Greeter", svc).Build()
 	if err != nil {
 		log.Fatalf("create server: %v", err)
 	}
@@ -35,6 +31,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
+
+	log.Printf("serve on %s", ln.Addr())
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

@@ -65,12 +65,12 @@ type ServerConn interface {
 	Close() error
 }
 
-type Server struct {
-	codec    Codec
+type Server[SC ServerConn, E Codec] struct {
+	codec    E
 	services map[string]*serviceDesc
 }
 
-func (s *Server) Handle(req *Request) (interface{}, *Error) {
+func (s *Server[SC, E]) Handle(req *Request) (interface{}, *Error) {
 	svc := s.services[req.Service]
 	if svc == nil {
 		return nil, &Error{Code: CodeServiceNotFound}
@@ -92,7 +92,7 @@ func (s *Server) Handle(req *Request) (interface{}, *Error) {
 	return reply[0].Interface(), nil
 }
 
-func (s *Server) asyncHandleRequest(sc *serverConn) {
+func (s *Server[SC, E]) asyncHandleRequest(sc *serverConn[SC]) {
 	for req := range sc.rq {
 		// 如果请求已经取消，直接跳过请求，这样可以少一次 pmu 锁
 		if req.ctx.interrupted() {
@@ -125,8 +125,8 @@ func (s *Server) asyncHandleRequest(sc *serverConn) {
 	sc.wg.Done()
 }
 
-func (s *Server) ServeConn(conn ServerConn) error {
-	sc := &serverConn{
+func (s *Server[SC, E]) ServeConn(conn SC) error {
+	sc := &serverConn[SC]{
 		conn:    conn,
 		rq:      make(chan *Request, 64),
 		pending: make(map[uint64]*Request),
@@ -184,132 +184,7 @@ func (s *Server) ServeConn(conn ServerConn) error {
 	return sc.err
 }
 
-type methodDesc struct {
-	fn reflect.Value
-	in reflect.Type
-}
-
-type serviceDesc struct {
-	rcvr    reflect.Value
-	methods map[string]*methodDesc
-}
-
-type ServerBuilder struct {
-	codec    Codec
-	services map[string]*serviceDesc
-	err      error
-}
-
-func (b *ServerBuilder) WithCodec(codec Codec) *ServerBuilder {
-	if b.err != nil {
-		return b
-	}
-	b.codec = codec
-	return b
-}
-
-func (b *ServerBuilder) registerService(name string, sv reflect.Value, stype reflect.Type) *ServerBuilder {
-	if b.services[name] != nil {
-		b.err = fmt.Errorf("service %s already defined", name)
-		return b
-	}
-
-	methods := collectRpcMethods(stype)
-	if len(methods) == 0 {
-		b.err = fmt.Errorf("type %s has no suitable RPC method", stype.Name())
-		return b
-	}
-
-	if b.services == nil {
-		b.services = make(map[string]*serviceDesc)
-	}
-	b.services[name] = &serviceDesc{
-		rcvr:    sv,
-		methods: methods,
-	}
-	return b
-}
-
-func (b *ServerBuilder) RegisterNamed(name string, svc interface{}) *ServerBuilder {
-	if b.err != nil {
-		return b
-	}
-
-	sv := reflect.ValueOf(svc)
-	return b.registerService(name, sv, sv.Type())
-}
-
-func (b *ServerBuilder) Register(svc interface{}) *ServerBuilder {
-	if b.err != nil {
-		return b
-	}
-
-	sv := reflect.ValueOf(svc)
-	stype := sv.Type()
-
-	var name string
-	if naming, ok := svc.(interface{ ServiceName() string }); ok {
-		name = naming.ServiceName()
-	} else {
-		ind := stype
-		if ind.Kind() == reflect.Ptr {
-			ind = stype.Elem()
-		}
-		name = ind.Name()
-	}
-
-	return b.registerService(name, sv, stype)
-}
-
-func (b *ServerBuilder) Build() (*Server, error) {
-	if b.err != nil {
-		return nil, b.err
-	}
-	if b.codec == nil {
-		return nil, fmt.Errorf("must specify codec")
-	}
-	return &Server{
-		codec:    b.codec,
-		services: b.services,
-	}, nil
-}
-
-var (
-	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-)
-
-func collectRpcMethods(rcvrType reflect.Type) map[string]*methodDesc {
-	methods := make(map[string]*methodDesc)
-	for i := 0; i < rcvrType.NumMethod(); i++ {
-		// method 原型需要满足:
-		// func (*Service) MethodName(context.Context, *ArgsStructType) (*ReplyStructType, error)
-		m := rcvrType.Method(i)
-		if !m.IsExported() {
-			continue
-		}
-		mty := m.Type
-		if mty.NumIn() != 3 || mty.NumOut() != 2 {
-			continue
-		}
-		if mty.In(1) != contextType || mty.Out(1) != errorType {
-			continue
-		}
-		in := mty.In(2)
-		out := mty.Out(0)
-		if in.Kind() != reflect.Ptr || in.Elem().Kind() != reflect.Struct ||
-			out.Kind() != reflect.Ptr || out.Elem().Kind() != reflect.Struct {
-			continue
-		}
-		methods[m.Name] = &methodDesc{
-			fn: m.Func,
-			in: in.Elem(),
-		}
-	}
-	return methods
-}
-
-type serverConn struct {
+type serverConn[SC ServerConn] struct {
 	down    int32
 	err     error
 	conn    ServerConn
@@ -319,7 +194,7 @@ type serverConn struct {
 	pmu     sync.Mutex
 }
 
-func (sc *serverConn) shutdown(err error) {
+func (sc *serverConn[SC]) shutdown(err error) {
 	if atomic.CompareAndSwapInt32(&sc.down, 0, 1) {
 		sc.err = err
 		close(sc.rq)

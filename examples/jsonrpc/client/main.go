@@ -18,7 +18,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("connected")
-	cc := arpc.NewClient(jsonrpc.WrapClientConn(conn), jsonrpc.GetCodec())
+	cc := arpc.NewClient(jsonrpc.WrapClientConn(conn), jsonrpc.Codec{})
 	defer cc.Close()
 	greeter := proto.NewGreeterClient(cc)
 	wg := sync.WaitGroup{}

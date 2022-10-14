@@ -27,22 +27,18 @@ type jsonResponse struct {
 	Error  *jsonError      `json:"error,omitempty"`
 }
 
-type jsonCodec struct{}
+type Codec struct{}
 
-func (*jsonCodec) Encode(obj interface{}) ([]byte, error) {
+func (Codec) Encode(obj interface{}) ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-func (*jsonCodec) Decode(src []byte, obj interface{}) error {
+func (Codec) Decode(src []byte, obj interface{}) error {
 	return json.Unmarshal(src, obj)
 }
 
-func GetCodec() arpc.Codec {
-	return (*jsonCodec)(nil)
-}
-
-type ServerConn struct {
-	inner io.ReadWriteCloser
+type ServerConn[RWC io.ReadWriteCloser] struct {
+	inner RWC
 	enc   *json.Encoder
 	dec   *json.Decoder
 }
@@ -60,7 +56,7 @@ func joinNames(service string, method string) string {
 	return service + "." + method
 }
 
-func (sc *ServerConn) ReadRequest(req *arpc.Request) error {
+func (sc *ServerConn[RWC]) ReadRequest(req *arpc.Request) error {
 	var jreq jsonRequest
 	err := sc.dec.Decode(&jreq)
 	if err != nil {
@@ -85,7 +81,7 @@ func (sc *ServerConn) ReadRequest(req *arpc.Request) error {
 	return nil
 }
 
-func (sc *ServerConn) WriteResponse(resp *arpc.Response) error {
+func (sc *ServerConn[RWC]) WriteResponse(resp *arpc.Response) error {
 	jresp := jsonResponse{
 		Id: resp.Seq,
 	}
@@ -100,26 +96,26 @@ func (sc *ServerConn) WriteResponse(resp *arpc.Response) error {
 	return sc.enc.Encode(&jresp)
 }
 
-func (sc *ServerConn) Close() error {
+func (sc *ServerConn[RWC]) Close() error {
 	return sc.inner.Close()
 }
 
-func WrapServerConn(rwc io.ReadWriteCloser) *ServerConn {
-	return &ServerConn{
+func WrapServerConn[RWC io.ReadWriteCloser](rwc RWC) *ServerConn[RWC] {
+	return &ServerConn[RWC]{
 		inner: rwc,
 		enc:   json.NewEncoder(rwc),
 		dec:   json.NewDecoder(rwc),
 	}
 }
 
-type ClientConn struct {
-	inner io.ReadWriteCloser
-	enc   *json.Encoder
-	dec   *json.Decoder
-	wmu   sync.Mutex
+type ClientConn[RWC io.ReadWriteCloser] struct {
+	rwc RWC
+	enc *json.Encoder
+	dec *json.Decoder
+	wmu sync.Mutex
 }
 
-func (cc *ClientConn) WriteRequest(req *arpc.Request) error {
+func (cc *ClientConn[RWC]) WriteRequest(req *arpc.Request) error {
 	cc.wmu.Lock()
 	defer cc.wmu.Unlock()
 
@@ -144,7 +140,7 @@ func (cc *ClientConn) WriteRequest(req *arpc.Request) error {
 	}
 }
 
-func (cc *ClientConn) ReadResponse(resp *arpc.Response) error {
+func (cc *ClientConn[RWC]) ReadResponse(resp *arpc.Response) error {
 	var jresp jsonResponse
 	err := cc.dec.Decode(&jresp)
 	if err != nil {
@@ -161,14 +157,14 @@ func (cc *ClientConn) ReadResponse(resp *arpc.Response) error {
 	return nil
 }
 
-func (cc *ClientConn) Close() error {
-	return cc.inner.Close()
+func (cc *ClientConn[RWC]) Close() error {
+	return cc.rwc.Close()
 }
 
-func WrapClientConn(rwc io.ReadWriteCloser) *ClientConn {
-	return &ClientConn{
-		inner: rwc,
-		enc:   json.NewEncoder(rwc),
-		dec:   json.NewDecoder(rwc),
+func WrapClientConn[RWC io.ReadWriteCloser](rwc RWC) *ClientConn[RWC] {
+	return &ClientConn[RWC]{
+		rwc: rwc,
+		enc: json.NewEncoder(rwc),
+		dec: json.NewDecoder(rwc),
 	}
 }

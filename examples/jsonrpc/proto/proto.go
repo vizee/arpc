@@ -2,8 +2,10 @@ package proto
 
 import (
 	"context"
+	"net"
 
 	"github.com/vizee/arpc"
+	"github.com/vizee/arpc/codec/jsonrpc"
 )
 
 type Greeter interface {
@@ -19,20 +21,20 @@ type HelloReply struct {
 }
 
 type greeterClient struct {
-	inner *arpc.Client
+	ac *arpc.Client[*jsonrpc.ClientConn[net.Conn], jsonrpc.Codec]
 }
 
 func (c *greeterClient) SayHello(ctx context.Context, in *HelloRequest) (*HelloReply, error) {
 	var reply HelloReply
-	err := c.inner.Invoke(ctx, "Greeter", "SayHello", in, &reply)
+	err := arpc.Invoke(c.ac, ctx, "Greeter", "SayHello", in, &reply)
 	if err != nil {
 		return nil, err
 	}
 	return &reply, nil
 }
 
-func NewGreeterClient(cc *arpc.Client) Greeter {
+func NewGreeterClient(ac *arpc.Client[*jsonrpc.ClientConn[net.Conn], jsonrpc.Codec]) Greeter {
 	return &greeterClient{
-		inner: cc,
+		ac: ac,
 	}
 }
