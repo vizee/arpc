@@ -170,14 +170,14 @@ func (s *Server[SC, E]) ServeConn(conn SC) error {
 		}
 	}
 
-	// 如果故障退出，先取消所有正在处理的请求，再等待处理请求的协程退出
-	// 如果优雅退出，先等待协程退出后再调用 cancelAll（本质 no-op）
 	if graceful {
-		cancelAll()
+		// 如果优雅退出，先等待协程退出后再调用 cancelAll（本质 no-op）
 		sc.wg.Wait()
+		cancelAll()
 	} else {
-		sc.wg.Wait()
+		// 如果故障退出，先取消所有正在处理的请求，再等待处理请求的协程退出
 		cancelAll()
+		sc.wg.Wait()
 	}
 
 	// wg.Wait() 可以保证 sc.err 不竞争
