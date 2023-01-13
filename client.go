@@ -118,7 +118,7 @@ func NewClient[CC ClientConn, E Codec](conn CC, codec E) *Client[CC, E] {
 	}
 }
 
-func Invoke[CC ClientConn, E Codec, I, O any](ac *Client[CC, E], ctx context.Context, service string, method string, args *I, reply *O) error {
+func Invoke[CC ClientConn, E Codec](ac *Client[CC, E], ctx context.Context, service string, method string, args any, reply any) error {
 	body, err := ac.codec.Encode(args)
 	if err != nil {
 		return err
